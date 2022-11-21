@@ -1,0 +1,398 @@
+/**
+ * jQuery Quovolver 2.0.2
+ * https://github.com/sebnitu/Quovolver
+ *
+ * By Sebastian Nitu - Copyright 2014 - All rights reserved
+ * Author URL: http://sebnitu.com
+ */
+;(function ($) {
+  $.fn.quovolver = function(options) {
+    'use strict';
+    
+    // Extend our default options with those provided.
+    var opts = $.extend({}, $.fn.quovolver.defaults, options);
+
+    // This allows for multiple instances of this plugin in the same document
+    return this.each(function () {
+
+      // Go To function
+      function gotoItem(itemNumber) {
+
+        // Check if stuff is already being animated and kill the script if it is
+        if( $items.is(':animated') || $this.is(':animated') ) { return false; }
+        // If the container has been hidden, kill the script
+        // This prevents the script from bugging out if something hides the revolving
+        // object from another script (tabs for example)
+        if( $box.is(':hidden') ) { return false; }
+
+        // Don't let itemNumber go above or below possible options
+        if ( itemNumber < 1 ) {
+          itemNumber = $total;
+        } else if ( itemNumber > $total ) {
+          itemNumber = 1;
+        }
+
+        // Create the data object to pass to our transition method
+        var gotoData = {
+            current : $( $items[$active -1] ), // Save currently active item
+            upcoming : $( $items[itemNumber - 1] ) // Save upcoming item
+        };
+
+        // Save current and upcoming hights and outer heights
+        gotoData.currentHeight = getHiddenProperty(gotoData.current, 'height');
+        gotoData.upcomingHeight = getHiddenProperty(gotoData.upcoming, 'height');
+        gotoData.currentOuterHeight = getHiddenProperty(gotoData.current, 'outerHeight');
+        gotoData.upcomingOuterHeight = getHiddenProperty(gotoData.upcoming, 'outerHeight');
+
+        // Save current and upcoming widths and outer widths
+        gotoData.currentWidth = getHiddenProperty(gotoData.current, 'width');
+        gotoData.upcomingWidth = getHiddenProperty(gotoData.upcoming, 'width');
+        gotoData.currentOuterWidth = getHiddenProperty(gotoData.current, 'outerWidth');
+        gotoData.upcomingOuterWidth = getHiddenProperty(gotoData.upcoming, 'outerWidth');
+
+        // Transition method
+        if (o.transition !== 'basic' &&
+          typeof o.transition === 'string' &&
+          eval('typeof ' + o.transition) === 'function' ) {
+          // Run the passed method
+          eval( o.transition + '(gotoData)' );
+        } else {
+          // Default transition method
+          basic(gotoData);
+        }
+
+        // Update active item
+        $active = itemNumber;
+
+        // Update navigation
+        updateNavNum($nav);
+        updateNavText($nav);
+
+        // Disable default behavior
+        return false;
+      }
+
+      // Build navigation
+      function buildNav() {
+        // Check the position of the nav and insert container
+        var nav;
+        if ( o.navPosition === 'above' || o.navPosition === 'both' ) {
+          $box.prepend('<div class="quovolve-nav quovolve-nav-above"></div>');
+          nav = $box.find('.quovolve-nav');
+        }
+        if ( o.navPosition === 'below' || o.navPosition === 'both' ) {
+          $box.append('<div class="quovolve-nav quovolve-nav-below"></div>');
+          nav = $box.find('.quovolve-nav');
+        }
+        if ( o.navPosition === 'custom' ) {
+          if ( o.navPositionCustom !== '' && $( o.navPositionCustom ).length !== 0 ) {
+            $( o.navPositionCustom ).append('<div class="quovolve-nav quovolve-nav-custom"></div>');
+            nav = $( o.navPositionCustom ).find('.quovolve-nav');
+          } else {
+            // console.log('Error', 'That custom selector did not return an element.');
+          }
+        }
+
+        // Previous and next navigation
+        if ( o.navPrev ) {
+          nav.append('<span class="nav-prev"><a href="#">' + o.navPrevText + '</a></span>');
+        }
+        if ( o.navNext ) {
+          nav.append('<span class="nav-next"><a href="#">' + o.navNextText + '</a></span>');
+        }
+        // Numbered navigation
+        if ( o.navNum ) {
+          nav.append('<ol class="nav-numbers"></ol>');
+          for (var i = 1; i < ($total + 1); i++ ) {
+            nav
+              .find('.nav-numbers')
+              .append('<li><a href="#item-' + i + '">' + i + '</a></li>');
+          }
+          updateNavNum(nav);
+        }
+        // Navigation description
+        if ( o.navText ) {
+          nav.append('<span class="nav-text"></span>');
+          updateNavText(nav);
+        }
+
+        return nav;
+      }
+
+      // Get height of a hidden element
+      function getHiddenProperty(item, property) {
+        // Get the requested property
+        var value = item[property]();
+        // if no value, it's probably because this element and/or a parent element is hidden
+        if (!value || value == 0) {
+          // walk up the DOM and show all elements momentarily
+          var elements = item.parents().andSelf().filter(':hidden');
+          // store current display
+          elements.each(function() {
+            this.oDisplay = this.style.display;
+            $(this).show();
+          });
+          // Get the property again
+          var value = item[property]();
+          // revert visibility of elements
+          elements.each(function() {
+            this.style.display = this.oDisplay;
+          });
+        }
+        // Return the value
+        return value;
+      }
+
+      // Equal Column Heights
+      function equalHeight(group) {
+        var tallest = 0;
+        group.height('auto');
+        group.each(function() {
+          var thisHeight;
+          if ( $(this).is(':visible') ) {
+            thisHeight = $(this).height();
+          } else {
+            thisHeight = getHiddenProperty( $(this), 'height' );
+          }
+          if(thisHeight > tallest) {
+            tallest = thisHeight;
+          }
+        });
+        group.height(tallest);
+      }
+
+      // Update numbered navigation
+      function updateNavNum(nav) {
+        if (o.navEnabled) {
+          nav.find('.nav-numbers li').removeClass('active');
+          nav
+            .find('.nav-numbers a[href="#item-' + $active + '"]')
+            .parent()
+            .addClass('active');
+        }
+      }
+
+      // Update navigation description
+      function updateNavText(nav) {
+        if (o.navEnabled) {
+          var content = o.navTextContent.replace('@a', $active).replace('@b', $total);
+          nav.find('.nav-text').text(content);
+        }
+      }
+
+      // Start auto play
+      function autoPlay() {
+        var intervalSpeed = (o.autoPlaySpeed == 'auto' ? $items[$active-1].textLength*25 + 2000 : o.autoPlaySpeed);
+        $box.addClass('play');
+        clearTimeout($intervalID);
+        $intervalID = setTimeout(function() {
+          gotoItem( $active + 1 );
+          autoPlay();
+        }, intervalSpeed);
+      }
+
+      // Pause auto play
+      function pauseAutoPlay() {
+        if ( o.stopAutoPlay !== true ) {
+          $box.hover(function() {
+            $box.addClass('pause').removeClass('play');
+            clearTimeout($intervalID);
+          }, function() {
+            $box.removeClass('pause').addClass('play');
+            clearTimeout($intervalID);
+            autoPlay();
+          });
+        }
+      }
+
+      // Stop auto play
+      function stopAutoPlay() {
+        $box.hover(function() {
+          $box.addClass('stop').removeClass('play');
+          clearTimeout($intervalID);
+        }, function() {});
+      }
+
+      function goToAndPlay(itemNumber) {
+        clearTimeout($intervalID);
+        gotoItem(itemNumber);
+        if (o.autoPlay) { 
+          autoPlay();
+        }
+      }
+
+      // Transition Effects
+      // Basic (default) Just swaps out items with no animation
+      function basic(data) {
+        $this.css('height', data.upcomingOuterHeight);
+        data.current.hide();
+        data.upcoming.show();
+        if (o.equalHeight === false) {
+          $this.css('height', 'auto');
+        }
+      }
+
+      // Fade animation
+      function fade(data) {
+
+        // Set container to current item's height
+        $this.height(data.currentOuterHeight);
+
+        // Fade out the current container
+        data.current.fadeOut(o.transitionSpeed, function() {
+          // Resize container to upcming item's height
+          $this.animate({
+            height : data.upcomingOuterHeight
+          }, o.transitionSpeed, function() {
+            // Fade in the upcoming item
+            data.upcoming.fadeIn(o.transitionSpeed, function() {
+              // Set height of container to auto
+              $this.height('auto');
+            });
+          });
+        });
+
+      }
+
+      // Save our object
+      var $this = $(this);
+
+      // Build element specific options
+      // This lets me access options with this syntax: o.optionName
+      var o = $.meta ? $.extend({}, opts, $this.data()) : opts;
+
+      // Initial styles and markup
+      $this.addClass('quovolve')
+         .css({ 'position' : 'relative' })
+         .wrap('<div class="quovolve-box"></div>');
+
+      var groupMethod;
+      if( o.children ) {
+        groupMethod = 'find';
+      } else {
+        groupMethod = 'children';
+      }
+
+      // Initialize element specific variables
+      var $box = $this.parent('.quovolve-box'),
+        $items = $this[groupMethod](o.children),
+        $active = 1,
+        $total = $items.length;
+
+      // Hide all except the first
+      $items.hide().filter(':first').show();
+
+      // Call build navigation function
+      if ( o.navPrev || o.navNext || o.navNum || o.navText ) {
+        o.navEnabled = true;
+        var $nav = buildNav();
+      } else {
+        o.navEnabled = false;
+      }
+
+      // Call equal heights function
+      if (o.equalHeight) {
+        equalHeight( $items );
+        // Recalculate equal heights on window resize
+        $(window).resize(function() {
+          equalHeight( $items );
+          $this.css('height', $($items[$active -1]).outerHeight() );
+        });
+      }
+
+      // Auto play interface
+      if (o.autoPlay) {
+          if (o.autoPlaySpeed == 'auto') {
+  								// get and store # of chars in each quote
+	        $items.each(function() {
+	          this.textLength = $(this).text().length;
+	        });
+								}
+        var $intervalID;
+        autoPlay();
+        if (o.stopOnHover) {
+          stopAutoPlay();
+        } else if (o.pauseOnHover) {
+          pauseAutoPlay();
+        }
+      }
+
+      // Bind to the forward and back buttons
+      $('.nav-prev a',$box).click(function () {
+        goToAndPlay( $active - 1 );
+        return false;
+      });
+      $('.nav-next a',$box).click(function () {
+        goToAndPlay( $active + 1 );
+        return false;
+      });
+
+      // Bind the numbered navigation buttons
+      $('.nav-numbers a',$box).click(function() {
+        goToAndPlay( $(this).text() );
+        return false;
+      });
+
+      // Create a public interface to move to a specific item
+      $(this).bind('goto', function (event, item) {
+        goToAndPlay( item );
+      });
+
+    }); // @end of return this.each()
+
+  };
+  
+  $.fn.quovolver.defaults = {
+
+    children : '', // If selector is provided, we will use the find method to get the group of items
+
+    transition : 'fade', // The style of the transition
+    transitionSpeed : 300, // This is the speed that each animation will take, not the entire transition
+
+    autoPlay : true, // Toggle auto rotate
+    autoPlaySpeed : 'auto', // Duration before each transition: either milliseconds or 'auto' to determine by quote length
+    pauseOnHover : true, // Should the auto rotate pause on hover
+    stopOnHover : false, // Should the auto rotate stop on hover (and not continue after hover)
+    equalHeight : true, // Should every item have equal heights
+
+    navPosition : 'above', // above, below, both, custom (must provide custom selector for placement)
+    navPositionCustom : '', // selector of custom element
+
+    navPrev : false, // Toggle "previous" button
+    navNext : false, // Toggle "next" button
+    navNum : false, // Toggle numbered navigation
+    navText : false, // Toggle navigation description (e.g. display current item # and total item #)
+
+    navPrevText : 'Prev', // Text for the "previous" button
+    navNextText : 'Next', // Text for the "next" button
+    navTextContent : '@a / @b' // @a will be replaced with current and @b with total
+
+  };
+})(jQuery);
+ã? ™~z      cz(ßcz(àDóËùc‚jæ   N    O^partitionKey=%28https%2Cohmyz.sh%29,:https://ohmyz.sh/js/jquery.quovolver.js necko:classified 1 strongly-framed 1 security-info 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 request-method GET response-head HTTP/1.1 200 OK
+Content-Type: application/javascript
+Content-Length: 12441
+Last-Modified: Sun, 10 Jul 2022 03:33:37 GMT
+Accept-Ranges: bytes
+Server: AmazonS3
+Date: Sat, 19 Nov 2022 19:37:12 GMT
+ETag: "35149905410e5561d2867b8a0d02758b"
+X-Cache: Hit from cloudfront
+Via: 1.1 078213358ed22cd95c76373c4ed65b5a.cloudfront.net (CloudFront)
+X-Amz-Cf-Pop: HIO50-C2
+X-Amz-Cf-Id: jhWFedzcNlrjVhx95QpJmcoyCOySD1bvHiu_ssUcdjwLNH6OuW8kng==
+Age: 63609
+ original-response-headers Content-Type: application/javascript
+Content-Length: 12441
+Connection: keep-alive
+Last-Modified: Sun, 10 Jul 2022 03:33:37 GMT
+Accept-Ranges: bytes
+Server: AmazonS3
+Date: Sat, 19 Nov 2022 19:37:12 GMT
+ETag: "35149905410e5561d2867b8a0d02758b"
+X-Cache: Hit from cloudfront
+Via: 1.1 078213358ed22cd95c76373c4ed65b5a.cloudfront.net (CloudFront)
+X-Amz-Cf-Pop: HIO50-C2
+X-Amz-Cf-Id: jhWFedzcNlrjVhx95QpJmcoyCOySD1bvHiu_ssUcdjwLNH6OuW8kng==
+Age: 63609
+ ctid 2 uncompressed-len 0 net-response-time-onstart 1045 net-response-time-onstop 1062   0™
